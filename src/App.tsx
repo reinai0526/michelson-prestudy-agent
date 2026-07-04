@@ -1392,16 +1392,16 @@ function FitChart({ result }: { result: NonNullable<ReturnType<typeof fitWavelen
   return (
     <div className="overflow-auto">
       <svg viewBox={`0 0 ${width} ${height}`} className="min-h-[320px] w-full min-w-[620px]">
-        <rect x="0" y="0" width={width} height={height} rx="8" fill="rgba(255,255,255,0.03)" />
-        <line x1={pad} y1={height - pad} x2={width - pad / 2} y2={height - pad} stroke="rgba(255,255,255,0.35)" />
-        <line x1={pad} y1={pad / 2} x2={pad} y2={height - pad} stroke="rgba(255,255,255,0.35)" />
-        <line x1={sx(lineStart.x)} y1={sy(lineStart.y)} x2={sx(lineEnd.x)} y2={sy(lineEnd.y)} stroke="#5eead4" strokeWidth="3" />
+        <rect x="0" y="0" width={width} height={height} rx="8" fill="rgba(255,255,255,0.22)" />
+        <line x1={pad} y1={height - pad} x2={width - pad / 2} y2={height - pad} stroke="#111827" strokeWidth="1.4" />
+        <line x1={pad} y1={pad / 2} x2={pad} y2={height - pad} stroke="#111827" strokeWidth="1.4" />
+        <line x1={sx(lineStart.x)} y1={sy(lineStart.y)} x2={sx(lineEnd.x)} y2={sy(lineEnd.y)} stroke="#2dd4bf" strokeWidth="3" />
         {result.residuals.map((point) => (
-          <circle key={point.id} cx={sx(point.n)} cy={sy(point.d)} r={result.outlierIds.includes(point.id) ? 7 : 5} fill={result.outlierIds.includes(point.id) ? "#facc15" : "#60a5fa"} />
+          <circle key={point.id} cx={sx(point.n)} cy={sy(point.d)} r={result.outlierIds.includes(point.id) ? 7 : 5} fill={result.outlierIds.includes(point.id) ? "#f59e0b" : "#3b82f6"} />
         ))}
-        <text x={pad} y={28} fill="#e2e8f0" fontSize="15">d = {result.slope}N + {result.intercept}，R² = {result.r2}</text>
-        <text x={width - 90} y={height - 18} fill="#94a3b8" fontSize="13">N/条</text>
-        <text x={12} y={42} fill="#94a3b8" fontSize="13">d/mm</text>
+        <text x={pad} y={28} fill="#111827" fontSize="15" fontWeight="700">d = {result.slope}N + {result.intercept}，R² = {result.r2}</text>
+        <text x={width - 90} y={height - 18} fill="#111827" fontSize="13" fontWeight="700">N/条</text>
+        <text x={12} y={42} fill="#111827" fontSize="13" fontWeight="700">d/mm</text>
       </svg>
     </div>
   );
