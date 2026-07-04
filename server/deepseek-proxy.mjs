@@ -68,12 +68,55 @@ function sendText(response, status, text) {
   response.end(text);
 }
 
-function sendFile(response, filePath) {
+function sendFile(request, response, filePath) {
   const ext = path.extname(filePath).toLowerCase();
+  const stat = fs.statSync(filePath);
+  const contentType = MIME_TYPES[ext] || "application/octet-stream";
+  const baseHeaders = {
+    "Content-Type": contentType,
+    "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=3600",
+    "Accept-Ranges": "bytes"
+  };
+  const range = request.headers.range;
+
+  // 浏览器和微信内置浏览器播放 MP4 时通常会发 Range 请求，
+  // 必须返回 206 分段内容，否则公开视频容易一直加载或黑屏。
+  if (range) {
+    const match = range.match(/bytes=(\d*)-(\d*)/);
+    if (!match) {
+      response.writeHead(416, { ...baseHeaders, "Content-Range": `bytes */${stat.size}` });
+      response.end();
+      return;
+    }
+    const start = match[1] ? Number(match[1]) : 0;
+    const end = match[2] ? Number(match[2]) : stat.size - 1;
+    if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= stat.size) {
+      response.writeHead(416, { ...baseHeaders, "Content-Range": `bytes */${stat.size}` });
+      response.end();
+      return;
+    }
+    const boundedEnd = Math.min(end, stat.size - 1);
+    response.writeHead(206, {
+      ...baseHeaders,
+      "Content-Range": `bytes ${start}-${boundedEnd}/${stat.size}`,
+      "Content-Length": boundedEnd - start + 1
+    });
+    if (request.method === "HEAD") {
+      response.end();
+      return;
+    }
+    fs.createReadStream(filePath, { start, end: boundedEnd }).pipe(response);
+    return;
+  }
+
   response.writeHead(200, {
-    "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
-    "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=3600"
+    ...baseHeaders,
+    "Content-Length": stat.size
   });
+  if (request.method === "HEAD") {
+    response.end();
+    return;
+  }
   fs.createReadStream(filePath).pipe(response);
 }
 
@@ -91,10 +134,10 @@ function serveStatic(request, response) {
     return;
   }
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-    sendFile(response, filePath);
+    sendFile(request, response, filePath);
     return;
   }
-  sendFile(response, path.join(DIST_DIR, "index.html"));
+  sendFile(request, response, path.join(DIST_DIR, "index.html"));
 }
 
 function getLanUrls(port) {
@@ -222,7 +265,7 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  if (request.method === "GET") {
+  if (request.method === "GET" || request.method === "HEAD") {
     serveStatic(request, response);
     return;
   }
