@@ -17,16 +17,16 @@ export default {
         ]
       },
       colors: {
-        space: "#07111f",
-        panel: "#0f1f35",
-        line: "#223b5d",
-        cyanbeam: "#5eead4",
-        optic: "#60a5fa",
-        violetbeam: "#a78bfa",
-        warm: "#facc15"
+        space: "#eef8ff",
+        panel: "#ffffff",
+        line: "#b9d7ee",
+        cyanbeam: "#0284c7",
+        optic: "#38bdf8",
+        violetbeam: "#6366f1",
+        warm: "#ea580c"
       },
       boxShadow: {
-        glow: "0 0 32px rgba(94, 234, 212, 0.22)"
+        glow: "0 18px 42px rgba(14, 116, 144, 0.14)"
       }
     }
   },

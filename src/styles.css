@@ -7,13 +7,17 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
   margin: 0;
   min-width: 320px;
-  background: #07111f;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(125, 211, 252, 0.32), transparent 34%),
+    radial-gradient(circle at 78% 10%, rgba(199, 210, 254, 0.36), transparent 28%),
+    linear-gradient(135deg, #f8fcff 0%, #e8f7ff 46%, #f5fbff 100%);
+  color: #0f2742;
 }
 
 button,
@@ -29,55 +33,56 @@ button:disabled {
 
 @layer components {
   .btn-primary {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-cyanbeam/50 bg-cyanbeam px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 active:scale-[0.98];
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-cyanbeam bg-cyanbeam px-4 py-2 text-sm font-semibold shadow-sm transition hover:bg-sky-600 active:scale-[0.98];
+    color: #ffffff;
   }
 
   .btn-secondary {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/[0.06] px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-cyanbeam/40 hover:bg-cyanbeam/10 active:scale-[0.98];
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-sky-200 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-cyanbeam/50 hover:bg-sky-50 hover:text-cyanbeam active:scale-[0.98];
   }
 
   .nav-btn {
-    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-transparent px-3 text-sm text-slate-300 transition hover:border-cyanbeam/30 hover:bg-cyanbeam/10 hover:text-white;
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-transparent px-3 text-sm font-medium text-slate-600 transition hover:border-cyanbeam/30 hover:bg-sky-50 hover:text-cyanbeam;
   }
 
   .nav-btn-active {
-    @apply border-cyanbeam/40 bg-cyanbeam/10 text-cyanbeam;
+    @apply border-cyanbeam/40 bg-sky-100 text-cyanbeam;
   }
 
   .field {
-    @apply w-full rounded-lg border border-white/15 bg-white/[0.06] px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyanbeam/60 focus:ring-2 focus:ring-cyanbeam/20;
+    @apply w-full rounded-lg border border-sky-200 bg-white/90 px-4 py-3 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-cyanbeam/60 focus:ring-2 focus:ring-cyanbeam/20;
   }
 
   .answer-option {
-    @apply flex min-h-14 min-w-0 items-center gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-4 text-left text-slate-100 transition hover:border-cyanbeam/40 hover:bg-cyanbeam/10;
+    @apply flex min-h-14 min-w-0 items-center gap-3 rounded-lg border border-sky-200 bg-white/85 p-4 text-left text-slate-800 shadow-sm transition hover:border-cyanbeam/45 hover:bg-sky-50;
   }
 
   .answer-option-active {
-    @apply border-cyanbeam/70 bg-cyanbeam/15;
+    @apply border-cyanbeam/70 bg-sky-100;
   }
 
   .option-key {
-    @apply grid h-8 w-8 shrink-0 place-items-center rounded-md border border-cyanbeam/30 bg-cyanbeam/10 text-cyanbeam;
+    @apply grid h-8 w-8 shrink-0 place-items-center rounded-md border border-cyanbeam/30 bg-sky-100 text-cyanbeam;
   }
 
   .tag {
-    @apply rounded-md border border-cyanbeam/30 bg-cyanbeam/10 px-2.5 py-1 text-xs text-cyanbeam;
+    @apply rounded-md border border-cyanbeam/25 bg-sky-100 px-2.5 py-1 text-xs font-medium text-cyanbeam;
   }
 
   .formula {
-    @apply mb-2 rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-center font-mono text-cyanbeam;
+    @apply mb-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-center font-mono text-cyanbeam;
   }
 
   .formula-card {
-    @apply min-w-0 rounded-lg border border-white/10 bg-white/[0.04] p-4;
+    @apply min-w-0 rounded-lg border border-sky-200 bg-white/85 p-4 shadow-sm;
   }
 
   .resource-card {
-    @apply min-w-0 rounded-lg border border-white/10 bg-white/[0.04] p-5 text-left transition hover:border-cyanbeam/35 hover:bg-cyanbeam/10;
+    @apply min-w-0 rounded-lg border border-sky-200 bg-white/85 p-5 text-left shadow-sm transition hover:border-cyanbeam/35 hover:bg-sky-50;
   }
 
   .resource-pill {
-    @apply inline-flex min-h-7 items-center rounded-md border border-cyanbeam/30 bg-cyanbeam/10 px-2.5 py-1 text-xs font-semibold text-cyanbeam;
+    @apply inline-flex min-h-7 items-center rounded-md border border-cyanbeam/25 bg-sky-100 px-2.5 py-1 text-xs font-semibold text-cyanbeam;
   }
 
   .resource-description {
@@ -109,11 +114,11 @@ button:disabled {
   }
 
   .markdown-message .katex {
-    @apply text-slate-100;
+    @apply text-slate-800;
   }
 
   .markdown-message .katex-display {
-    @apply my-4 overflow-x-auto rounded-md border border-white/10 bg-white/[0.04] px-3 py-3 text-[0.95rem];
+    @apply my-4 overflow-x-auto rounded-md border border-sky-200 bg-sky-50 px-3 py-3 text-[0.95rem];
   }
 
   .formula-card .markdown-message p {
@@ -123,6 +128,84 @@ button:disabled {
   .formula-card .markdown-message .katex-display {
     @apply mb-0 mt-3;
   }
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.bg-space {
+  background-color: transparent !important;
+}
+
+.bg-space\/50,
+.bg-space\/70,
+.bg-space\/80 {
+  background-color: rgba(239, 248, 255, 0.88) !important;
+}
+
+.bg-panel,
+.bg-panel\/70,
+.bg-panel\/75,
+.bg-panel\/80,
+.bg-panel\/95 {
+  background-color: rgba(255, 255, 255, 0.86) !important;
+}
+
+.border-white\/10,
+.border-white\/15 {
+  border-color: rgba(148, 187, 216, 0.42) !important;
+}
+
+.bg-white\/\[0\.03\],
+.bg-white\/\[0\.04\],
+.bg-white\/\[0\.06\] {
+  background-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.bg-cyanbeam\/10,
+.bg-cyanbeam\/15 {
+  background-color: rgba(224, 242, 254, 0.92) !important;
+}
+
+.text-slate-50,
+.text-slate-100,
+.text-slate-200 {
+  color: #14314d !important;
+}
+
+.text-slate-300 {
+  color: #395a75 !important;
+}
+
+.text-slate-400 {
+  color: #647f97 !important;
+}
+
+.text-white {
+  color: #0f2742;
+}
+
+.btn-primary.text-white,
+.btn-primary .text-white,
+button.btn-primary {
+  color: #ffffff !important;
+}
+
+.text-emerald-300 {
+  color: #059669 !important;
+}
+
+.text-warm {
+  color: #c2410c !important;
+}
+
+.bg-warm\/10 {
+  background-color: rgba(255, 237, 213, 0.88) !important;
+}
+
+.border-warm\/30 {
+  border-color: rgba(234, 88, 12, 0.34) !important;
 }
 
 @media print {
