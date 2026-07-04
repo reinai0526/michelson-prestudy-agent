@@ -220,26 +220,49 @@ function parseGeneratedQuestions(raw: string, module: string): Question[] {
   if (!jsonText) return [];
   try {
     const parsed = JSON.parse(jsonText) as Array<Partial<Question>>;
+    const optionKeys = ["A", "B", "C", "D"];
     return parsed
       .filter((item) => item.question && item.type)
       .slice(0, 2)
-      .map((item, index) => ({
-        id: `AI-${normalizeText(module).slice(0, 8)}-${Date.now()}-${index + 1}`,
-        type: item.type === "judgement" || item.type === "short" ? item.type : "choice",
-        module: [module],
-        difficulty: "中等",
-        question: String(item.question),
-        options: item.options,
-        correctAnswer: item.correctAnswer,
-        explanation: String(item.explanation || "本题用于巩固该薄弱知识点，请围绕光路、光程差和条纹变化进行分析。"),
-        keywords: item.keywords?.length ? item.keywords : [module],
-        requiredPoints: item.requiredPoints?.length ? item.requiredPoints : [module],
-        commonMistakes: [{ pattern: "概念混淆", message: "请先定位题目对应的物理量，再写出判断依据。" }],
-        hints: ["先判断这个问题对应哪一个光路或数据处理环节。", "再把它与光程差、条纹数或仪器结构联系起来。"],
-        followUpQuestions: ["这个结论能否用光程差或条纹变化再解释一次？"],
-        recommendation: `继续围绕“${module}”完成变式巩固。`,
-        score: 3
-      }));
+      .map((item, index): Question | null => {
+        const type = item.type === "judgement" || item.type === "short" ? item.type : "choice";
+        const rawOptions = Array.isArray(item.options) ? item.options : [];
+        const options = rawOptions
+          .map((option) => ({
+            key: String(option.key ?? "").trim().toUpperCase(),
+            text: String(option.text ?? "").trim()
+          }))
+          .filter((option) => option.key && option.text);
+        const optionKeySet = new Set(options.map((option) => option.key));
+        const correctAnswer = String(item.correctAnswer ?? "").trim();
+        if (type === "choice") {
+          const hasCompleteOptions =
+            options.length >= 4 &&
+            optionKeys.every((key) => optionKeySet.has(key)) &&
+            optionKeySet.has(correctAnswer);
+          if (!hasCompleteOptions) return null;
+        }
+        if (type === "judgement" && correctAnswer !== "true" && correctAnswer !== "false") return null;
+        return {
+          id: `AI-${normalizeText(module).slice(0, 8)}-${Date.now()}-${index + 1}`,
+          type,
+          module: [module],
+          difficulty: "中等",
+          question: String(item.question),
+          options: type === "choice" ? options : undefined,
+          correctAnswer: type === "short" ? undefined : correctAnswer,
+          referenceAnswer: type === "short" ? String(item.referenceAnswer || item.explanation || "") : undefined,
+          explanation: String(item.explanation || "本题用于巩固该薄弱知识点，请围绕光路、光程差和条纹变化进行分析。"),
+          keywords: item.keywords?.length ? item.keywords : [module],
+          requiredPoints: item.requiredPoints?.length ? item.requiredPoints : [module],
+          commonMistakes: [{ pattern: "概念混淆", message: "请先定位题目对应的物理量，再写出判断依据。" }],
+          hints: ["先判断这个问题对应哪一个光路或数据处理环节。", "再把它与光程差、条纹数或仪器结构联系起来。"],
+          followUpQuestions: ["这个结论能否用光程差或条纹变化再解释一次？"],
+          recommendation: `继续围绕“${module}”完成变式巩固。`,
+          score: 3
+        };
+      })
+      .filter((item): item is Question => !!item);
   } catch {
     return [];
   }
@@ -253,7 +276,7 @@ export async function generateReinforcementQuestionsWithModel(module: string, we
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        question: `请根据薄弱知识点“${module}”生成 ${count} 道新的巩固题。不要重复这些原错题编号：${weakQuestionIds.join("、")}。题目要围绕迈克耳孙干涉仪实验，改变题干和考查角度。`,
+        question: `请根据薄弱知识点“${module}”生成 ${count} 道新的巩固题。不要重复这些原错题编号：${weakQuestionIds.join("、")}。题目要围绕迈克耳孙干涉仪实验，改变题干和考查角度。请只返回 JSON 数组；若为选择题，必须提供 A、B、C、D 四个非空选项，并给出 correctAnswer。`,
         sources,
         kind: "practice",
         mode: "practice",

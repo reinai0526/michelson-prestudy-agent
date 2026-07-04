@@ -55,6 +55,7 @@ const precheckStats = {
   judgement: precheckQuestions.filter((question) => question.type === "judgement").length,
   short: precheckQuestions.filter((question) => question.type === "short").length
 };
+const choiceKeys = ["A", "B", "C", "D"];
 const defaultMeasurementRows: MeasurementPoint[] = Array.from({ length: 10 }, (_, index) => ({
   id: `P${index + 1}`,
   n: index * 50,
@@ -69,6 +70,35 @@ const initialExtensionState: ExtensionLearningState = {
   reportAdded: false,
   viewedResourceTitles: {}
 };
+
+function hasCompleteChoiceOptions(question: Question) {
+  if (question.type !== "choice") return true;
+  const options = question.options ?? [];
+  const optionKeys = new Set(options.map((option) => option.key));
+  return (
+    options.length >= 4 &&
+    choiceKeys.every((key) => optionKeys.has(key)) &&
+    options.every((option) => option.text.trim().length > 0) &&
+    !!question.correctAnswer &&
+    optionKeys.has(question.correctAnswer)
+  );
+}
+
+function isPracticeQuestionUsable(question: Question) {
+  if (!question.question.trim()) return false;
+  if (question.type === "choice") return hasCompleteChoiceOptions(question);
+  if (question.type === "judgement") return question.correctAnswer === "true" || question.correctAnswer === "false";
+  return !!question.referenceAnswer || question.requiredPoints.length > 0;
+}
+
+function mergeUniqueQuestions(primary: Question[], fallback: Question[], limit = 4) {
+  const seen = new Set<string>();
+  return [...primary, ...fallback].filter((question) => {
+    if (seen.has(question.id) || !isPracticeQuestionUsable(question)) return false;
+    seen.add(question.id);
+    return true;
+  }).slice(0, limit);
+}
 
 function loadExtensionState(): ExtensionLearningState {
   try {
@@ -138,6 +168,10 @@ export default function App() {
   const patchState = (updater: (previous: StudyState) => StudyState) => setState((previous) => updater(previous));
 
   const submitAnswer = () => {
+    if (currentQuestion.type === "choice" && !hasCompleteChoiceOptions(currentQuestion)) {
+      setToast("本题选项不完整，已停止提交。请重新进入个性化练习获取稳定题目。");
+      return;
+    }
     if (!draft.trim()) {
       setToast("请先作答，再提交给迈小测诊断。");
       return;
@@ -204,18 +238,19 @@ export default function App() {
 
   const practiceModule = async (module: string) => {
     const recommendation = recommendations.find((item) => item.module === module);
-    const source = [...questionBank, ...personalizedPracticeQuestions];
+    const source = [...personalizedPracticeQuestions, ...questionBank].filter(isPracticeQuestionUsable);
+    const excludedIds = new Set(recommendation?.weakQuestionIds ?? []);
     const recommendedQuestions = (recommendation?.questionIds ?? [])
       .map((id) => source.find((q) => q.id === id))
-      .filter(Boolean) as Question[];
+      .filter((question): question is Question => !!question && !excludedIds.has(question.id) && isPracticeQuestionUsable(question));
     const fallbackQuestions = source
-      .filter((q) => q.module.includes(module) && !recommendation?.weakQuestionIds?.includes(q.id))
-      .slice(0, 4);
-    let nextPracticeSet = recommendedQuestions.length ? recommendedQuestions : fallbackQuestions;
-    if (nextPracticeSet.length < 2) {
+      .filter((q) => q.module.includes(module) && !excludedIds.has(q.id));
+    let nextPracticeSet = mergeUniqueQuestions(recommendedQuestions, fallbackQuestions, 4);
+    if (nextPracticeSet.length < 3) {
       setToast("正在为该薄弱知识点生成补充巩固题。");
-      const generated = await generateReinforcementQuestionsWithModel(module, recommendation?.weakQuestionIds ?? [], 2 - nextPracticeSet.length);
-      nextPracticeSet = [...nextPracticeSet, ...generated].slice(0, 4);
+      const generated = (await generateReinforcementQuestionsWithModel(module, recommendation?.weakQuestionIds ?? [], 3 - nextPracticeSet.length))
+        .filter(isPracticeQuestionUsable);
+      nextPracticeSet = mergeUniqueQuestions(nextPracticeSet, generated, 4);
     }
     if (!nextPracticeSet.length) return;
     setPersonalizedPracticeSet(nextPracticeSet);
@@ -689,6 +724,7 @@ function QuizPage(props: {
 }) {
   const { question, record, draft, setDraft } = props;
   const canEditShort = question.type !== "short" || !record || record.attempts < 2 || record.viewedReference;
+  const choiceOptions = hasCompleteChoiceOptions(question) ? question.options ?? [] : [];
   return (
     <section className="grid gap-6 lg:grid-cols-[1fr_360px]">
       <div className="rounded-lg border border-white/10 bg-panel/80 p-5 sm:p-6">
@@ -704,9 +740,9 @@ function QuizPage(props: {
         <ProgressBar value={Math.round(((props.index + 1) / props.total) * 100)} />
         <p className="mt-6 text-xl leading-9 text-slate-50">{question.question}</p>
         <div className="mt-6">
-          {question.type === "choice" && (
+          {question.type === "choice" && choiceOptions.length > 0 && (
             <div className="grid gap-3">
-              {question.options?.map((option) => (
+              {choiceOptions.map((option) => (
                 <button
                   key={option.key}
                   className={`answer-option ${draft === option.key ? "answer-option-active" : ""}`}
@@ -716,6 +752,11 @@ function QuizPage(props: {
                   <span>{option.text}</span>
                 </button>
               ))}
+            </div>
+          )}
+          {question.type === "choice" && choiceOptions.length === 0 && (
+            <div className="rounded-md border border-warm/30 bg-warm/10 p-4 text-sm leading-7 text-warm">
+              本题选项格式不完整，系统已阻止空选项展示。请返回个性化练习重新进入该知识点，系统会优先推送本地稳定题库中的新题。
             </div>
           )}
           {question.type === "judgement" && (
@@ -1472,7 +1513,7 @@ function TeacherPage({ state, loadDemo, clearData }: { state: StudyState; loadDe
   const diagnostics = generateLearningDiagnostics(state);
   return (
     <section className="space-y-6">
-      <SectionHeader title="教师展示模式" subtitle="用于讲课比赛现场说明平台如何支持学情前测和精准教学。" />
+      <SectionHeader title="教师展示模式" />
       <div className="flex flex-wrap gap-3">
         <button className="btn-primary" onClick={loadDemo}>一键生成演示用模拟数据</button>
         <button className="btn-secondary" onClick={clearData}>清空本地演示数据</button>
@@ -1546,12 +1587,12 @@ function Panel({ title, icon, children }: any) {
   );
 }
 
-function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
+function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div>
       <p className="text-sm text-cyanbeam">Michelson Interferometer</p>
       <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{title}</h1>
-      <p className="mt-3 max-w-3xl text-slate-300">{subtitle}</p>
+      {subtitle && <p className="mt-3 max-w-3xl text-slate-300">{subtitle}</p>}
     </div>
   );
 }
