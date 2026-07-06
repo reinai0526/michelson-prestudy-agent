@@ -128,6 +128,14 @@ button:disabled {
   .formula-card .markdown-message .katex-display {
     @apply mb-0 mt-3;
   }
+
+  .choice-card {
+    @apply min-h-56 rounded-lg border border-sky-200 bg-white/85 p-5 shadow-sm transition hover:border-cyanbeam/45 hover:bg-sky-50 active:scale-[0.99];
+  }
+
+  .choice-icon {
+    @apply grid h-14 w-14 place-items-center rounded-lg border border-cyanbeam/30 bg-sky-100 text-cyanbeam;
+  }
 }
 
 #root {
@@ -206,6 +214,201 @@ button.btn-primary {
 
 .border-warm\/30 {
   border-color: rgba(234, 88, 12, 0.34) !important;
+}
+
+.mobile-bottom-nav {
+  display: none;
+}
+
+.mobile-mode {
+  background:
+    radial-gradient(circle at 50% -10%, rgba(14, 165, 233, 0.18), transparent 34%),
+    linear-gradient(180deg, #f7fcff 0%, #edf8ff 100%);
+}
+
+.mobile-mode header > div,
+.mobile-mode .app-main {
+  max-width: 520px;
+}
+
+.mobile-mode header > div {
+  padding-left: 0.875rem;
+  padding-right: 0.875rem;
+}
+
+.mobile-mode .desktop-nav,
+.mobile-mode .assistant-card {
+  display: none;
+}
+
+.mobile-mode .mode-switch {
+  flex: 0 0 auto;
+  min-width: 0;
+  width: auto;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  white-space: nowrap;
+}
+
+.mobile-mode .app-main {
+  padding: 1rem 0.875rem 6.5rem;
+}
+
+.mobile-mode section {
+  min-width: 0;
+}
+
+.mobile-mode .home-hero {
+  min-height: auto;
+  padding: 1.125rem;
+}
+
+.mobile-mode .home-hero-ring {
+  display: none;
+}
+
+.mobile-mode .home-title,
+.mobile-mode h1,
+.mobile-mode h2,
+.mobile-mode h3,
+.mobile-mode p,
+.mobile-mode span,
+.mobile-mode button,
+.mobile-mode a,
+.mobile-mode li {
+  overflow-wrap: anywhere;
+}
+
+.mobile-mode .home-title {
+  white-space: normal;
+  font-size: 2.15rem;
+  line-height: 1.12;
+}
+
+.mobile-mode h1 {
+  font-size: 1.9rem;
+  line-height: 1.18;
+}
+
+.mobile-mode h2 {
+  font-size: 1.35rem;
+  line-height: 1.28;
+}
+
+.mobile-mode .grid {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.mobile-mode .btn-primary,
+.mobile-mode .btn-secondary {
+  width: 100%;
+  min-height: 3rem;
+  padding-left: 0.95rem;
+  padding-right: 0.95rem;
+  text-align: center;
+}
+
+.mobile-mode .mode-switch.btn-secondary {
+  width: auto;
+}
+
+.mobile-mode .answer-option {
+  min-height: 3.6rem;
+  align-items: flex-start;
+  padding: 0.9rem;
+}
+
+.mobile-mode .option-key {
+  height: 2rem;
+  width: 2rem;
+}
+
+.mobile-mode .field {
+  min-height: 3rem;
+  font-size: 16px;
+}
+
+.mobile-mode textarea.field {
+  min-height: 8rem;
+}
+
+.mobile-mode .rounded-lg {
+  border-radius: 0.5rem;
+}
+
+.mobile-mode .markdown-message,
+.mobile-mode .text-sm {
+  line-height: 1.7;
+}
+
+.mobile-mode .resource-card,
+.mobile-mode .formula-card,
+.mobile-mode section.rounded-lg,
+.mobile-mode .rounded-lg.border {
+  padding: 1rem;
+}
+
+.mobile-mode .toast-message {
+  bottom: 5.25rem;
+  width: min(calc(100vw - 1.5rem), 480px);
+}
+
+.mobile-mode .mobile-bottom-nav {
+  position: fixed;
+  left: 50%;
+  bottom: 0.65rem;
+  z-index: 45;
+  display: grid;
+  width: min(calc(100vw - 1rem), 500px);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  transform: translateX(-50%);
+  gap: 0.25rem;
+  border: 1px solid rgba(148, 187, 216, 0.5);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 0.4rem;
+  box-shadow: 0 18px 42px rgba(14, 116, 144, 0.18);
+  backdrop-filter: blur(14px);
+}
+
+.mobile-mode .mobile-bottom-nav button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 3.2rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  border-radius: 0.55rem;
+  color: #647f97;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.mobile-mode .mobile-bottom-nav button.active {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.mobile-mode .mobile-bottom-nav svg {
+  flex-shrink: 0;
+}
+
+@media (max-width: 760px) {
+  .desktop-mode header > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .desktop-mode .desktop-nav {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+  }
+
+  .desktop-mode .home-title {
+    white-space: normal;
+  }
 }
 
 @media print {

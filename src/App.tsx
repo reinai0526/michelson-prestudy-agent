@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
@@ -19,11 +19,13 @@ import {
   Home,
   Lightbulb,
   MessageCircle,
+  Monitor,
   Printer,
   RefreshCcw,
   RotateCcw,
   Send,
   Sparkles,
+  Smartphone,
   Table2,
   Target,
   Telescope,
@@ -62,6 +64,7 @@ const defaultMeasurementRows: MeasurementPoint[] = Array.from({ length: 10 }, (_
   d: null
 }));
 const extensionStorageKey = "michelson-extension-learning-v1";
+const displayModeStorageKey = "michelson-display-mode-session-v1";
 const initialExtensionState: ExtensionLearningState = {
   exerciseAnswers: {},
   completedQuestionIds: [],
@@ -109,7 +112,19 @@ function loadExtensionState(): ExtensionLearningState {
   }
 }
 
+type DisplayMode = "desktop" | "mobile";
+
+function loadDisplayMode(): DisplayMode | null {
+  try {
+    const saved = sessionStorage.getItem(displayModeStorageKey);
+    return saved === "desktop" || saved === "mobile" ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
+  const [displayMode, setDisplayMode] = useState<DisplayMode | null>(() => loadDisplayMode());
   const [view, setView] = useState<ViewName>("home");
   const [state, setState] = useState<StudyState>(() => loadStudyState());
   const [draft, setDraft] = useState("");
@@ -154,8 +169,21 @@ export default function App() {
   );
   const progress = Math.round((Object.keys(state.records).length / questionBank.length) * 100);
 
+  const chooseDisplayMode = (mode: DisplayMode) => {
+    setDisplayMode(mode);
+    try {
+      sessionStorage.setItem(displayModeStorageKey, mode);
+    } catch {
+      // Session storage can be unavailable in restricted browsers; the in-memory choice still works.
+    }
+    if (mode === "mobile") setAssistantOpen(false);
+  };
+
   useEffect(() => saveStudyState(state), [state]);
   useEffect(() => localStorage.setItem(extensionStorageKey, JSON.stringify(extensionState)), [extensionState]);
+  useEffect(() => {
+    if (displayMode === "mobile") setAssistantOpen(false);
+  }, [displayMode]);
   useEffect(() => {
     setDraft(state.records[currentQuestion.id]?.answer ?? "");
   }, [currentQuestion.id, state.records]);
@@ -347,11 +375,15 @@ export default function App() {
     setToast("拓展实验记录已加入报告。");
   };
 
+  if (!displayMode) {
+    return <DisplayModeChooser onChoose={chooseDisplayMode} />;
+  }
+
   return (
-    <div className="min-h-screen overflow-x-hidden bg-space text-slate-100">
+    <div className={`app-shell min-h-screen overflow-x-hidden bg-space text-slate-100 ${displayMode === "mobile" ? "mobile-mode" : "desktop-mode"}`}>
       <OpticBackground />
       <header className="sticky top-0 z-30 border-b border-white/10 bg-space/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <button className="flex items-center gap-2 text-left" onClick={() => setView("home")}>
             <span className="grid h-10 w-10 place-items-center rounded-lg border border-cyanbeam/40 bg-cyanbeam/10 text-cyanbeam">
               <Telescope size={21} />
@@ -361,7 +393,7 @@ export default function App() {
               <span className="block font-semibold">智能预习平台</span>
             </span>
           </button>
-          <nav className="flex items-center gap-2">
+          <nav className="desktop-nav flex items-center gap-2">
             <NavButton active={view === "guide"} onClick={() => setView("guide")} icon={<BookOpenCheck size={18} />} label="引导" />
             <NavButton active={view === "precheck" || view === "quiz"} onClick={() => setView("precheck")} icon={<ClipboardList size={18} />} label="预习检测" />
             <NavButton active={view === "classroomQa"} onClick={() => setView("classroomQa")} icon={<MessageCircle size={18} />} label="智能问答" />
@@ -370,10 +402,24 @@ export default function App() {
             <NavButton active={view === "report"} onClick={() => setView("report")} icon={<BarChart3 size={18} />} label="报告" />
             <NavButton active={view === "teacher"} onClick={() => setView("teacher")} icon={<BrainCircuit size={18} />} label="教师" />
           </nav>
+          <button
+            className="mode-switch btn-secondary"
+            onClick={() => {
+              try {
+                sessionStorage.removeItem(displayModeStorageKey);
+              } catch {
+                // Ignore storage failures; switching still works in memory.
+              }
+              setDisplayMode(null);
+            }}
+          >
+            {displayMode === "mobile" ? <Smartphone size={17} /> : <Monitor size={17} />}
+            <span>{displayMode === "mobile" ? "手机版" : "电脑版"}</span>
+          </button>
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <main className="app-main relative z-10 mx-auto max-w-7xl px-4 py-6 sm:px-6">
         {view === "home" && (
           <HomePage
             state={state}
@@ -483,7 +529,41 @@ export default function App() {
         diagnostics={diagnostics}
         recommendations={recommendations}
       />
-      {toast && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-cyanbeam/30 bg-panel px-4 py-3 text-sm shadow-glow">{toast}</div>}
+      {displayMode === "mobile" && <MobileTabBar view={view} setView={setView} />}
+      {toast && <div className="toast-message fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-cyanbeam/30 bg-panel px-4 py-3 text-sm shadow-glow">{toast}</div>}
+    </div>
+  );
+}
+
+function DisplayModeChooser({ onChoose }: { onChoose: (mode: DisplayMode) => void }) {
+  return (
+    <div className="min-h-screen overflow-hidden bg-space text-slate-100">
+      <OpticBackground />
+      <main className="relative z-10 mx-auto flex min-h-screen max-w-5xl items-center px-4 py-8">
+        <section className="w-full rounded-lg border border-white/10 bg-panel/80 p-6 shadow-glow sm:p-8">
+          <div className="mb-7">
+            <p className="text-sm text-cyanbeam">迈小测 · 进入前请选择界面</p>
+            <h1 className="mt-3 text-3xl font-bold leading-tight sm:text-5xl">迈克耳孙干涉仪智能平台</h1>
+            <p className="mt-4 max-w-2xl text-slate-300">
+              同学们可以按照自己的设备选择手机版或电脑版。两种界面共享学习记录、题库、问答和报告。
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <button className="choice-card text-left" onClick={() => onChoose("mobile")}>
+              <span className="choice-icon"><Smartphone size={28} /></span>
+              <span className="mt-4 block text-2xl font-semibold text-slate-100">手机版</span>
+              <span className="mt-3 block text-sm leading-7 text-slate-300">适合微信、手机浏览器打开。文字自动换行，导航放到底部，答题和问答区域更适合单手浏览。</span>
+              <span className="mt-5 inline-flex text-sm font-semibold text-cyanbeam">进入手机版</span>
+            </button>
+            <button className="choice-card text-left" onClick={() => onChoose("desktop")}>
+              <span className="choice-icon"><Monitor size={28} /></span>
+              <span className="mt-4 block text-2xl font-semibold text-slate-100">电脑版</span>
+              <span className="mt-3 block text-sm leading-7 text-slate-300">保留现在的大屏展示效果，适合投屏、电脑浏览器、课堂演示和教师端查看。</span>
+              <span className="mt-5 inline-flex text-sm font-semibold text-cyanbeam">进入电脑版</span>
+            </button>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
@@ -505,14 +585,14 @@ function HomePage({
 }) {
   return (
     <section className="grid gap-6 lg:grid-cols-[1.32fr_0.68fr]">
-      <div className="relative min-h-[520px] overflow-hidden rounded-lg border border-white/10 bg-panel/70 p-6 shadow-glow sm:p-10">
-        <div className="absolute right-[-90px] top-8 h-80 w-80 rounded-full border border-cyanbeam/25" />
-        <div className="absolute right-[-40px] top-20 h-56 w-56 rounded-full border border-violetbeam/25" />
+      <div className="home-hero relative min-h-[520px] overflow-hidden rounded-lg border border-white/10 bg-panel/70 p-6 shadow-glow sm:p-10">
+        <div className="home-hero-ring absolute right-[-90px] top-8 h-80 w-80 rounded-full border border-cyanbeam/25" />
+        <div className="home-hero-ring absolute right-[-40px] top-20 h-56 w-56 rounded-full border border-violetbeam/25" />
         <div className="relative">
           <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyanbeam/30 px-3 py-1 text-sm text-cyanbeam">
             <Sparkles size={16} /> 全国大学生物理实验讲课竞赛展示版
           </p>
-          <h1 className="max-w-none whitespace-nowrap text-[clamp(2.25rem,4.1vw,3.75rem)] font-bold leading-tight">迈克耳孙干涉仪智能平台</h1>
+          <h1 className="home-title max-w-none whitespace-nowrap text-[clamp(2.25rem,4.1vw,3.75rem)] font-bold leading-tight">迈克耳孙干涉仪智能平台</h1>
           <p className="mt-5 max-w-2xl text-xl text-slate-300">从实验桌上的干涉圆环，走向丈量宇宙的精密标尺</p>
           <p className="mt-6 max-w-3xl text-slate-300">
             通过课前引导、即时反馈、知识诊断和个性化推荐，帮助学生把“光程差变化、干涉级次变化、条纹吞吐、反推波长”的主线真正连起来。
@@ -1627,7 +1707,7 @@ function TeacherPage({ state, loadDemo, clearData }: { state: StudyState; loadDe
 function AssistantCard({ open, setOpen, progress, diagnostics, recommendations }: any) {
   const weakest = diagnostics.filter((item: any) => item.attempted > 0).sort((a: any, b: any) => a.score - b.score)[0];
   return (
-    <div className="fixed bottom-5 right-5 z-40 max-w-[calc(100vw-2rem)]">
+    <div className="assistant-card fixed bottom-5 right-5 z-40 max-w-[calc(100vw-2rem)]">
       {!open ? (
         <button className="btn-primary rounded-full shadow-glow" onClick={() => setOpen(true)}><Sparkles size={18} />迈小测</button>
       ) : (
@@ -1643,6 +1723,29 @@ function AssistantCard({ open, setOpen, progress, diagnostics, recommendations }
         </div>
       )}
     </div>
+  );
+}
+
+function MobileTabBar({ view, setView }: { view: ViewName; setView: (view: ViewName) => void }) {
+  const items: Array<{ view: ViewName; match?: ViewName[]; icon: ReactNode; label: string }> = [
+    { view: "home", icon: <Home size={18} />, label: "首页" },
+    { view: "precheck", match: ["precheck", "quiz"], icon: <ClipboardList size={18} />, label: "检测" },
+    { view: "classroomQa", icon: <MessageCircle size={18} />, label: "问答" },
+    { view: "dataLab", icon: <Calculator size={18} />, label: "数据" },
+    { view: "report", icon: <BarChart3 size={18} />, label: "报告" }
+  ];
+  return (
+    <nav className="mobile-bottom-nav">
+      {items.map((item) => {
+        const active = item.view === view || item.match?.includes(view);
+        return (
+          <button key={item.label} className={active ? "active" : ""} onClick={() => setView(item.view)}>
+            {item.icon}
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
