@@ -106,7 +106,15 @@ export function searchDirectionMaterials(title: string, keywords: string[], limi
   return searchKnowledgeBase(expandedQuery, 24, "extension")
     .filter((item) => {
       const haystack = normalizeText(`${item.title}${item.source}${item.snippet}`);
-      return normalizedKeywords.some((keyword) => haystack.includes(keyword));
+      const keywordMatched = normalizedKeywords.some((keyword) => haystack.includes(keyword));
+      if (!keywordMatched) return false;
+      if (title.includes("白光")) {
+        return ["白光", "等厚", "零光程", "彩色条纹", "相干长度"].some((keyword) => haystack.includes(normalizeText(keyword)));
+      }
+      if (title.includes("仪器改进")) {
+        return ["步进电机", "光电计数", "光电探测", "自动计数", "计数器", "微动手轮", "驱动装置"].some((keyword) => haystack.includes(normalizeText(keyword)));
+      }
+      return true;
     })
     .filter((item, index, items) => items.findIndex((other) => other.source === item.source) === index)
     .slice(0, limit);

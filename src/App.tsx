@@ -1146,14 +1146,49 @@ function materialTypeLabel(material: RagSource) {
   return "课程资料";
 }
 
+function materialReadableSummary(material: RagSource, direction: ExtensionDirection) {
+  const title = `${material.title || ""}${material.source || ""}`;
+  if (title.includes("白光和激光扩展光源协同调节白光等厚干涉条纹")) {
+    return "该论文围绕白光等厚干涉条纹调节困难展开，提出用白光和激光扩展光源协同观察的方法。学习时可重点关注：白光条纹只在近等光程处出现，激光条纹可帮助判断动镜调节方向、调节速度以及回程差是否消除。";
+  }
+  if (title.includes("迈克尔逊干涉仪调节白光干涉条纹的实验研究")) {
+    return "该资料讨论白光干涉条纹的调节与零光程差定位方法，强调借助参考条纹或辅助光学元件判断动镜位置，从而更准确地找到白光彩色条纹出现的区域。";
+  }
+  if (title.includes("基于白光迈克尔逊干涉系统的光栅拼接研究")) {
+    return "该论文展示白光迈克耳孙干涉系统在精密光栅拼接中的应用，重点体现白光干涉在近零光程差定位、高精度对准和微小位移判断中的价值。";
+  }
+  if (title.includes("迈克尔逊干涉仪用步进电机驱动装置的设计")) {
+    return "该论文围绕用步进电机驱动微动手轮展开，说明通过电机脉冲控制转角和转速，可以减少人工转动停顿、回程差和操作不稳定带来的误差。";
+  }
+  if (title.includes("迈克尔逊干涉仪干涉环纹光电计数器的研制")) {
+    return "该论文设计光电计数器替代人工数环，把干涉条纹的明暗变化转化为可计数信号，用于降低漏数、多数和视觉疲劳造成的误差，提高波长测量的稳定性。";
+  }
+  if (direction.title.includes("白光")) {
+    return "该资料与白光干涉方向相关，可用于理解白光相干长度短、彩色条纹只在近零光程差附近清晰出现，以及如何通过调节动镜捕捉中央条纹。";
+  }
+  if (direction.title.includes("仪器改进")) {
+    return "该资料与实验仪器改进方向相关，可用于理解如何把人工调节、人工计数转化为自动驱动、光电探测或图像识别，提高实验稳定性和测量效率。";
+  }
+  return "该资料包含复杂公式或排版，建议点击查看原文。";
+}
+
+function isReadableMaterialSnippet(snippet: string) {
+  const compact = snippet.replace(/\s+/g, "");
+  const chineseCount = (compact.match(/[\u4e00-\u9fa5]/g) || []).length;
+  const latinRun = /[A-Za-z]{18,}/.test(compact);
+  const formulaNoise = /Fig|DOI|Vol|ISSN|CN\d|M1|M2|P1|[=＋+\-－×*/]{2,}/i.test(snippet);
+  return chineseCount >= 55 && !latinRun && !formulaNoise;
+}
+
 function materialBrief(material: RagSource, direction: ExtensionDirection) {
   const snippet = String(material.snippet ?? "").trim();
-  if (!snippet || snippet.length < 45) {
-    return "该资料包含复杂公式或排版，建议点击查看原文。";
+  const generatedSummary = materialReadableSummary(material, direction);
+  if (!snippet || snippet.length < 45 || !isReadableMaterialSnippet(snippet)) {
+    return generatedSummary;
   }
   const directionHit = direction.keywords.find((keyword) => snippet.includes(keyword));
   const prefix = directionHit ? `该资料围绕“${directionHit}”展开，` : `该资料与“${direction.title}”方向相关，`;
-  return `${prefix}${snippet.replace(/\s+/g, " ").slice(0, 120)}${snippet.length > 120 ? "..." : ""}`;
+  return `${prefix}${generatedSummary}`;
 }
 
 function MaterialCard({ material, direction, onViewed }: { material: RagSource; direction: ExtensionDirection; onViewed: () => void }) {
