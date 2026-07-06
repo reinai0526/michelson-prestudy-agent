@@ -32,6 +32,37 @@ function cleanSnippet(text: string) {
   return cleaned.length >= 45 ? cleaned.slice(0, 180) : "";
 }
 
+const CURATED_EXTENSION_SOURCES = {
+  whiteLight: [
+    "docs/知网2-拓展实验/白光和激光扩展光源协同调节白光等厚干涉条纹_王希成.pdf",
+    "docs/知网2-拓展实验/迈克尔逊干涉仪调节白光干涉条纹的实验研究_武小琴.pdf"
+  ],
+  instrumentImprovement: [
+    "docs/知网2-拓展实验/迈克尔逊干涉仪用步进电机驱动装置的设计_王立军.pdf",
+    "docs/知网2-拓展实验/迈克尔逊干涉仪干涉环纹光电计数器的研制_茅天伟.pdf"
+  ]
+};
+
+function curatedMaterials(sources: string[], limit: number): RagSource[] {
+  return sources
+    .map((source, index): RagSource | null => {
+      const chunk = knowledgeBase.find((item) => item.source === source);
+      if (!chunk) return null;
+      return {
+        id: chunk.id,
+        source: chunk.source,
+        page: chunk.page,
+        title: chunk.title,
+        snippet: cleanSnippet(chunk.text),
+        score: 100 - index,
+        library: chunk.library,
+        sourceUrl: buildSourceUrl(chunk.source)
+      };
+    })
+    .filter((item): item is RagSource => Boolean(item))
+    .slice(0, limit);
+}
+
 function tokenize(query: string) {
   const normalized = normalizeText(query);
   const terms = [
@@ -101,6 +132,13 @@ export function searchKnowledgeBase(query: string, limit = 5, library?: "base" |
 }
 
 export function searchDirectionMaterials(title: string, keywords: string[], limit = 5): RagSource[] {
+  if (title.includes("白光")) {
+    return curatedMaterials(CURATED_EXTENSION_SOURCES.whiteLight, limit);
+  }
+  if (title.includes("仪器改进")) {
+    return curatedMaterials(CURATED_EXTENSION_SOURCES.instrumentImprovement, limit);
+  }
+
   const expandedQuery = `${title} ${keywords.join(" ")}`;
   const normalizedKeywords = keywords.map(normalizeText).filter(Boolean);
   return searchKnowledgeBase(expandedQuery, 24, "extension")
