@@ -504,7 +504,7 @@ function HomePage({
   restart: () => void;
 }) {
   return (
-    <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+    <section className="grid gap-6 lg:grid-cols-[1.32fr_0.68fr]">
       <div className="relative min-h-[520px] overflow-hidden rounded-lg border border-white/10 bg-panel/70 p-6 shadow-glow sm:p-10">
         <div className="absolute right-[-90px] top-8 h-80 w-80 rounded-full border border-cyanbeam/25" />
         <div className="absolute right-[-40px] top-20 h-56 w-56 rounded-full border border-violetbeam/25" />
@@ -512,7 +512,7 @@ function HomePage({
           <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyanbeam/30 px-3 py-1 text-sm text-cyanbeam">
             <Sparkles size={16} /> 全国大学生物理实验讲课竞赛展示版
           </p>
-          <h1 className="max-w-3xl text-4xl font-bold leading-tight sm:text-6xl">迈克耳孙干涉仪智能预习平台</h1>
+          <h1 className="max-w-none whitespace-nowrap text-[clamp(2.25rem,4.1vw,3.75rem)] font-bold leading-tight">迈克耳孙干涉仪智能平台</h1>
           <p className="mt-5 max-w-2xl text-xl text-slate-300">从实验桌上的干涉圆环，走向丈量宇宙的精密标尺</p>
           <p className="mt-6 max-w-3xl text-slate-300">
             通过课前引导、即时反馈、知识诊断和个性化推荐，帮助学生把“光程差变化、干涉级次变化、条纹吞吐、反推波长”的主线真正连起来。
@@ -1226,9 +1226,9 @@ function ExtensionExperimentPanel({
   if (!selectedExtension) {
     return (
       <section className="space-y-6">
-        <SectionHeader title="拓展实验与改进" subtitle="请选择一个方向，进一步探索迈克耳孙干涉仪在白光干涉、自动控制、微小形变测量、智能计数和折射率测量中的应用。" />
+        <SectionHeader title="拓展实验与改进" subtitle="请选择一个方向，进一步探索迈克耳孙干涉仪在白光干涉和实验仪器改进中的应用。" />
         <div className="rounded-lg border border-cyanbeam/25 bg-cyanbeam/10 p-4 text-sm leading-7 text-slate-200">
-          基础波长测量已完成。请选择一个拓展方向，进一步探索迈克耳孙干涉仪在现代精密测量和实验改进中的应用。
+          基础波长测量已完成。请选择一个拓展方向，进一步探索迈克耳孙干涉仪在现象观察和实验仪器改进中的应用。
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           {extensionDirections.map((direction) => (
@@ -1376,32 +1376,69 @@ function ExtensionDirectionCard({ direction, onSelect }: { direction: ExtensionD
 }
 
 function FitChart({ result }: { result: NonNullable<ReturnType<typeof fitWavelength>> }) {
-  const width = 720;
-  const height = 360;
-  const pad = 54;
+  const width = 920;
+  const height = 430;
+  const plotLeft = 86;
+  const plotRight = width - 64;
+  const plotTop = 78;
+  const plotBottom = height - 78;
   const xs = result.residuals.map((point) => point.n);
   const ys = result.residuals.flatMap((point) => [point.d, point.predicted]);
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  const sx = (x: number) => pad + ((x - minX) / Math.max(1, maxX - minX)) * (width - pad * 1.4);
-  const sy = (y: number) => height - pad - ((y - minY) / Math.max(0.000001, maxY - minY)) * (height - pad * 1.5);
-  const lineStart = { x: minX, y: result.slope * minX + result.intercept };
-  const lineEnd = { x: maxX, y: result.slope * maxX + result.intercept };
+  const xSpan = Math.max(1, maxX - minX);
+  const ySpan = Math.max(0.000001, maxY - minY);
+  const xMinPlot = minX - xSpan * 0.04;
+  const xMaxPlot = maxX + xSpan * 0.04;
+  const yMinPlot = minY - ySpan * 0.1;
+  const yMaxPlot = maxY + ySpan * 0.14;
+  const sx = (x: number) => plotLeft + ((x - xMinPlot) / (xMaxPlot - xMinPlot)) * (plotRight - plotLeft);
+  const sy = (y: number) => plotBottom - ((y - yMinPlot) / (yMaxPlot - yMinPlot)) * (plotBottom - plotTop);
+  const lineStart = { x: xMinPlot, y: result.slope * xMinPlot + result.intercept };
+  const lineEnd = { x: xMaxPlot, y: result.slope * xMaxPlot + result.intercept };
+  const xTicks = Array.from({ length: 5 }, (_, index) => xMinPlot + ((xMaxPlot - xMinPlot) * index) / 4);
+  const yTicks = Array.from({ length: 5 }, (_, index) => yMinPlot + ((yMaxPlot - yMinPlot) * index) / 4);
+  const formatTick = (value: number) => {
+    if (Math.abs(value) >= 100) return value.toFixed(0);
+    if (Math.abs(value) >= 10) return value.toFixed(1).replace(/\.0$/, "");
+    return value.toFixed(3).replace(/\.?0+$/, "");
+  };
+
   return (
     <div className="overflow-auto">
-      <svg viewBox={`0 0 ${width} ${height}`} className="min-h-[320px] w-full min-w-[620px]">
+      <svg viewBox={`0 0 ${width} ${height}`} className="min-h-[380px] w-full min-w-[760px]">
+        <defs>
+          <marker id="axis-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#111827" />
+          </marker>
+        </defs>
         <rect x="0" y="0" width={width} height={height} rx="8" fill="rgba(255,255,255,0.22)" />
-        <line x1={pad} y1={height - pad} x2={width - pad / 2} y2={height - pad} stroke="#111827" strokeWidth="1.4" />
-        <line x1={pad} y1={pad / 2} x2={pad} y2={height - pad} stroke="#111827" strokeWidth="1.4" />
-        <line x1={sx(lineStart.x)} y1={sy(lineStart.y)} x2={sx(lineEnd.x)} y2={sy(lineEnd.y)} stroke="#2dd4bf" strokeWidth="3" />
-        {result.residuals.map((point) => (
-          <circle key={point.id} cx={sx(point.n)} cy={sy(point.d)} r={result.outlierIds.includes(point.id) ? 7 : 5} fill={result.outlierIds.includes(point.id) ? "#f59e0b" : "#3b82f6"} />
+        {xTicks.map((tick) => (
+          <g key={`x-${tick}`}>
+            <line x1={sx(tick)} y1={plotTop} x2={sx(tick)} y2={plotBottom} stroke="#d7e8f6" strokeWidth="1" />
+            <line x1={sx(tick)} y1={plotBottom} x2={sx(tick)} y2={plotBottom + 7} stroke="#111827" strokeWidth="1.5" />
+            <text x={sx(tick)} y={plotBottom + 28} textAnchor="middle" fill="#111827" fontSize="14" fontWeight="700">{formatTick(tick)}</text>
+          </g>
         ))}
-        <text x={pad} y={28} fill="#111827" fontSize="15" fontWeight="700">d = {result.slope}N + {result.intercept}，R² = {result.r2}</text>
-        <text x={width - 90} y={height - 18} fill="#111827" fontSize="13" fontWeight="700">N/条</text>
-        <text x={12} y={42} fill="#111827" fontSize="13" fontWeight="700">d/mm</text>
+        {yTicks.map((tick) => (
+          <g key={`y-${tick}`}>
+            <line x1={plotLeft} y1={sy(tick)} x2={plotRight} y2={sy(tick)} stroke="#d7e8f6" strokeWidth="1" />
+            <line x1={plotLeft - 7} y1={sy(tick)} x2={plotLeft} y2={sy(tick)} stroke="#111827" strokeWidth="1.5" />
+            <text x={plotLeft - 14} y={sy(tick) + 5} textAnchor="end" fill="#111827" fontSize="14" fontWeight="700">{formatTick(tick)}</text>
+          </g>
+        ))}
+        <line x1={plotLeft} y1={plotBottom} x2={plotRight + 18} y2={plotBottom} stroke="#111827" strokeWidth="2" markerEnd="url(#axis-arrow)" />
+        <line x1={plotLeft} y1={plotBottom} x2={plotLeft} y2={plotTop - 18} stroke="#111827" strokeWidth="2" markerEnd="url(#axis-arrow)" />
+        <line x1={sx(lineStart.x)} y1={sy(lineStart.y)} x2={sx(lineEnd.x)} y2={sy(lineEnd.y)} stroke="#2dd4bf" strokeWidth="4" strokeLinecap="round" />
+        {result.residuals.map((point) => (
+          <circle key={point.id} cx={sx(point.n)} cy={sy(point.d)} r={result.outlierIds.includes(point.id) ? 7 : 6} fill={result.outlierIds.includes(point.id) ? "#f59e0b" : "#3b82f6"} />
+        ))}
+        <rect x={plotLeft + 10} y="24" width="380" height="38" rx="10" fill="rgba(255,255,255,0.86)" stroke="#bfdbfe" />
+        <text x={plotLeft + 26} y="49" fill="#111827" fontSize="17" fontWeight="800">d = {result.slope}N + {result.intercept}，R² = {result.r2}</text>
+        <text x={plotRight - 46} y={plotBottom + 58} fill="#111827" fontSize="16" fontWeight="800">N/条</text>
+        <text x={plotLeft - 58} y={plotTop - 4} fill="#111827" fontSize="16" fontWeight="800">d/mm</text>
       </svg>
     </div>
   );
