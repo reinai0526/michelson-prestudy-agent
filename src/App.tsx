@@ -1732,6 +1732,7 @@ function MobileTabBar({ view, setView }: { view: ViewName; setView: (view: ViewN
     { view: "precheck", match: ["precheck", "quiz"], icon: <ClipboardList size={18} />, label: "检测" },
     { view: "classroomQa", icon: <MessageCircle size={18} />, label: "问答" },
     { view: "dataLab", icon: <Calculator size={18} />, label: "数据" },
+    { view: "extension", icon: <Sparkles size={18} />, label: "拓展" },
     { view: "report", icon: <BarChart3 size={18} />, label: "报告" }
   ];
   return (
