@@ -13,16 +13,22 @@ import {
   Calculator,
   CheckCircle2,
   ClipboardList,
+  Cloud,
+  CloudOff,
   Database,
   Download,
+  Eye,
   FileSearch,
   Home,
   Lightbulb,
+  LoaderCircle,
+  LockKeyhole,
   MessageCircle,
   Monitor,
   Printer,
   RefreshCcw,
   RotateCcw,
+  Search,
   Send,
   Sparkles,
   Smartphone,
@@ -31,6 +37,7 @@ import {
   Telescope,
   Upload,
   UserRound,
+  Users,
   XCircle
 } from "lucide-react";
 import { modules, questionBank, questionStats } from "./data/questionBank";
@@ -44,9 +51,16 @@ import {
   generateLearningRecommendation
 } from "./services/agent";
 import { generateAnswerWithModel, generateReinforcementQuestionsWithModel, searchDirectionMaterials } from "./services/rag";
-import { clearStudyState, initialStudyState, loadStudyState, makeDemoState, saveStudyState } from "./services/storage";
+import { clearStudyState, initialStudyState, loadStudyState, saveStudyState } from "./services/storage";
+import {
+  clearSavedTeacherCode,
+  fetchTeacherSubmissions,
+  loadSavedTeacherCode,
+  saveTeacherCode,
+  syncStudentProgress
+} from "./services/submissions";
 import { fitWavelength, parseCsvTable } from "./services/wavelength";
-import type { AnswerRecord, ChatMessage, ExtensionDirection, ExtensionLearningState, MeasurementPoint, Question, RagSource, StudyState, ViewName } from "./types";
+import type { AnswerRecord, ChatMessage, ExtensionDirection, ExtensionLearningState, MeasurementPoint, Question, RagSource, StudentSubmission, StudyState, SyncStatus, ViewName } from "./types";
 
 const typeLabel = { choice: "选择题", judgement: "判断题", short: "简答题" };
 const precheckIds = ["C02", "C03", "C04", "C05", "C01", "J01", "C07", "C08", "C09", "C06", "C10", "C11", "C15", "C12", "J10"];
@@ -144,6 +158,8 @@ export default function App() {
   const [instrumentBmm, setInstrumentBmm] = useState(0.0005);
   const [extensionState, setExtensionState] = useState<ExtensionLearningState>(() => loadExtensionState());
   const [extensionQuestionInput, setExtensionQuestionInput] = useState("");
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [lastSyncedAt, setLastSyncedAt] = useState("");
 
   const activeQuestions = useMemo(() => {
     if (quizScope === "personalized") {
@@ -168,6 +184,7 @@ export default function App() {
     [extensionState.selectedDirectionId]
   );
   const progress = Math.round((Object.keys(state.records).length / questionBank.length) * 100);
+  const profileReady = Boolean(state.studentName.trim());
 
   const chooseDisplayMode = (mode: DisplayMode) => {
     setDisplayMode(mode);
@@ -182,6 +199,22 @@ export default function App() {
   useEffect(() => saveStudyState(state), [state]);
   useEffect(() => localStorage.setItem(extensionStorageKey, JSON.stringify(extensionState)), [extensionState]);
   useEffect(() => {
+    if (!profileReady || Object.keys(state.records).length === 0) {
+      setSyncStatus("idle");
+      return;
+    }
+    setSyncStatus("syncing");
+    const timer = window.setTimeout(() => {
+      syncStudentProgress(state, extensionState)
+        .then((result) => {
+          setSyncStatus("synced");
+          setLastSyncedAt(result.updatedAt);
+        })
+        .catch(() => setSyncStatus("error"));
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [extensionState, profileReady, state]);
+  useEffect(() => {
     if (displayMode === "mobile") setAssistantOpen(false);
   }, [displayMode]);
   useEffect(() => {
@@ -194,6 +227,15 @@ export default function App() {
   }, [toast]);
 
   const patchState = (updater: (previous: StudyState) => StudyState) => setState((previous) => updater(previous));
+
+  const requireStudentProfile = (action: () => void) => {
+    if (!profileReady) {
+      setToast("请先填写姓名，答题数据才能同步到教师后台。");
+      setView("home");
+      return;
+    }
+    action();
+  };
 
   const submitAnswer = () => {
     if (currentQuestion.type === "choice" && !hasCompleteChoiceOptions(currentQuestion)) {
@@ -255,6 +297,11 @@ export default function App() {
   };
 
   const startWrongPractice = () => {
+    if (!profileReady) {
+      setToast("请先在首页填写姓名。");
+      setView("home");
+      return;
+    }
     if (!state.wrongBook.length) {
       setToast("当前还没有错题。");
       return;
@@ -288,6 +335,11 @@ export default function App() {
   };
 
   const startPrecheck = () => {
+    if (!profileReady) {
+      setToast("请先在首页填写姓名，学习数据才能同步给老师。");
+      setView("home");
+      return;
+    }
     setQuizScope("precheck");
     patchState((previous) => ({ ...previous, practiceMode: "all", currentIndex: 0 }));
     setView("quiz");
@@ -424,16 +476,18 @@ export default function App() {
           <HomePage
             state={state}
             progress={progress}
-            setView={setView}
-            setName={(studentName) => patchState((previous) => ({ ...previous, studentName }))}
-            continueStudy={() => {
+            setProfile={(field, value) => patchState((previous) => ({ ...previous, [field]: value }))}
+            onStart={() => requireStudentProfile(() => setView("guide"))}
+            continueStudy={() => requireStudentProfile(() => {
               setQuizScope("precheck");
               setView("quiz");
-            }}
+            })}
             restart={restart}
+            syncStatus={syncStatus}
+            lastSyncedAt={lastSyncedAt}
           />
         )}
-        {view === "guide" && <GuidePage onStart={() => setView("quiz")} />}
+        {view === "guide" && <GuidePage onStart={() => requireStudentProfile(() => setView("quiz"))} />}
         {view === "precheck" && (
           <PrecheckPage
             state={state}
@@ -478,14 +532,7 @@ export default function App() {
           />
         )}
         {view === "teacher" && (
-          <TeacherPage
-            state={state}
-            loadDemo={() => {
-              setState(makeDemoState());
-              setToast("已生成演示用模拟数据。");
-            }}
-            clearData={restart}
-          />
+          <TeacherPage />
         )}
         {view === "classroomQa" && (
           <ClassroomQaPage
@@ -571,17 +618,21 @@ function DisplayModeChooser({ onChoose }: { onChoose: (mode: DisplayMode) => voi
 function HomePage({
   state,
   progress,
-  setView,
-  setName,
+  setProfile,
+  onStart,
   continueStudy,
-  restart
+  restart,
+  syncStatus,
+  lastSyncedAt
 }: {
   state: StudyState;
   progress: number;
-  setView: (view: ViewName) => void;
-  setName: (name: string) => void;
+  setProfile: (field: "studentName" | "studentId" | "className", value: string) => void;
+  onStart: () => void;
   continueStudy: () => void;
   restart: () => void;
+  syncStatus: SyncStatus;
+  lastSyncedAt: string;
 }) {
   return (
     <section className="grid gap-6 lg:grid-cols-[1.32fr_0.68fr]">
@@ -603,19 +654,40 @@ function HomePage({
             <Metric label="选择/判断" value={`${precheckStats.choice}/${precheckStats.judgement}`} />
             <Metric label="后续巩固" value="按错题推荐" />
           </div>
-          <div className="mt-8 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <label className="relative">
               <UserRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input
                 className="field pl-10"
                 value={state.studentName}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="学生姓名或学号（可选）"
-                aria-label="学生姓名或学号"
+                onChange={(event) => setProfile("studentName", event.target.value)}
+                placeholder="学生姓名（必填）"
+                aria-label="学生姓名"
               />
             </label>
-            <button className="btn-primary" onClick={() => setView("guide")}>开始15题核心检测</button>
+            <label className="relative">
+              <ClipboardList className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input
+                className="field pl-10"
+                value={state.studentId}
+                onChange={(event) => setProfile("studentId", event.target.value)}
+                placeholder="学号（建议填写）"
+                aria-label="学号"
+              />
+            </label>
+            <label className="relative">
+              <Users className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input
+                className="field pl-10"
+                value={state.className}
+                onChange={(event) => setProfile("className", event.target.value)}
+                placeholder="班级（选填）"
+                aria-label="班级"
+              />
+            </label>
+            <button className="btn-primary" onClick={onStart}>开始15题核心检测</button>
             <button className="btn-secondary" onClick={continueStudy}>继续上次学习</button>
+            <SyncBadge status={syncStatus} lastSyncedAt={lastSyncedAt} hasRecords={Object.keys(state.records).length > 0} />
           </div>
           <div className="mt-5 flex items-center gap-3">
             <ProgressBar value={progress} />
@@ -1661,46 +1733,350 @@ function ReportPage({ state, report, onWrongPractice, onPracticeModule, onHome, 
   );
 }
 
-function TeacherPage({ state, loadDemo, clearData }: { state: StudyState; loadDemo: () => void; clearData: () => void }) {
-  const diagnostics = generateLearningDiagnostics(state);
+type TeacherStudentRow = {
+  submission: StudentSubmission;
+  report: ReturnType<typeof generateLearningReport>;
+  attempted: number;
+  progress: number;
+  completed: boolean;
+};
+
+const average = (values: number[]) => values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0;
+
+function formatDashboardTime(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function csvCell(value: unknown) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function TeacherPage() {
+  const [teacherCode, setTeacherCode] = useState(() => loadSavedTeacherCode());
+  const [authenticated, setAuthenticated] = useState(false);
+  const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [storageMode, setStorageMode] = useState("");
+  const [query, setQuery] = useState("");
+  const [classFilter, setClassFilter] = useState("全部班级");
+  const [selectedKey, setSelectedKey] = useState("");
+
+  const loadData = async (code = teacherCode) => {
+    if (!code.trim()) {
+      setError("请输入教师访问码。");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const result = await fetchTeacherSubmissions(code.trim());
+      setSubmissions(result.submissions);
+      setStorageMode(result.storage);
+      setAuthenticated(true);
+      saveTeacherCode(code.trim());
+      setSelectedKey((current) => current || result.submissions[0]?.submissionKey || "");
+    } catch (loadError) {
+      setAuthenticated(false);
+      setError(loadError instanceof Error ? loadError.message : "教师端数据读取失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const saved = loadSavedTeacherCode();
+    if (saved) loadData(saved);
+    // The saved session code only needs to be checked when the teacher page opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const rows = useMemo<TeacherStudentRow[]>(() => submissions.map((submission) => {
+    const report = generateLearningReport(submission.state);
+    const attempted = Object.keys(submission.state.records || {}).length;
+    return {
+      submission,
+      report,
+      attempted,
+      progress: Math.min(100, Math.round((attempted / precheckQuestions.length) * 100)),
+      completed: Boolean(submission.state.completedAt)
+    };
+  }), [submissions]);
+
+  const classes = useMemo(() => Array.from(new Set(rows.map((row) => row.submission.state.className || "未填写班级"))).sort(), [rows]);
+  const filteredRows = useMemo(() => rows.filter((row) => {
+    const profile = row.submission.state;
+    const matchesClass = classFilter === "全部班级" || (profile.className || "未填写班级") === classFilter;
+    const keyword = query.trim().toLowerCase();
+    const matchesQuery = !keyword || [profile.studentName, profile.studentId, profile.className]
+      .some((value) => String(value || "").toLowerCase().includes(keyword));
+    return matchesClass && matchesQuery;
+  }), [classFilter, query, rows]);
+
+  const moduleStats = useMemo(() => modules.map((module) => {
+    const relatedIds = new Set(questionBank.filter((question) => question.module.includes(module)).map((question) => question.id));
+    const records = filteredRows.flatMap((row) => Object.values(row.submission.state.records || {}).filter((record) => relatedIds.has(record.questionId)));
+    const scores = filteredRows
+      .map((row) => row.report.diagnostics.find((item) => item.module === module))
+      .filter((item) => item && item.attempted > 0)
+      .map((item) => item!.score);
+    return {
+      module,
+      attempted: records.length,
+      correct: records.filter((record) => record.isCorrect).length,
+      accuracy: records.length ? Math.round((records.filter((record) => record.isCorrect).length / records.length) * 100) : 0,
+      score: average(scores),
+      mastered: scores.filter((score) => score >= 70).length
+    };
+  }), [filteredRows]);
+
+  const questionStatsForClass = useMemo(() => questionBank.map((question) => {
+    const records = filteredRows.map((row) => row.submission.state.records?.[question.id]).filter(Boolean);
+    const correct = records.filter((record) => record.isCorrect).length;
+    return {
+      question,
+      attempted: records.length,
+      correct,
+      accuracy: records.length ? Math.round((correct / records.length) * 100) : 0
+    };
+  }).filter((item) => item.attempted > 0).sort((a, b) => a.accuracy - b.accuracy || b.attempted - a.attempted), [filteredRows]);
+
+  const selectedRow = filteredRows.find((row) => row.submission.submissionKey === selectedKey) || filteredRows[0];
+  const averageAccuracy = average(filteredRows.map((row) => row.report.accuracy));
+  const averageFirstAccuracy = average(filteredRows.map((row) => row.report.firstAccuracy));
+  const completedCount = filteredRows.filter((row) => row.completed).length;
+
+  const exportCsv = () => {
+    const header = ["姓名", "学号", "班级", "完成进度", "正确率", "首次正确率", "错题", "是否完成", "最后同步"];
+    const body = filteredRows.map((row) => [
+      row.submission.state.studentName,
+      row.submission.state.studentId,
+      row.submission.state.className,
+      `${row.progress}%`,
+      `${row.report.accuracy}%`,
+      `${row.report.firstAccuracy}%`,
+      row.submission.state.wrongBook.join("、"),
+      row.completed ? "是" : "否",
+      row.submission.updatedAt
+    ]);
+    const csv = `\uFEFF${[header, ...body].map((line) => line.map(csvCell).join(",")).join("\n")}`;
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `迈小测学情数据-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (!authenticated) {
+    return (
+      <section className="mx-auto max-w-xl space-y-6 py-8">
+        <SectionHeader title="教师学情后台" subtitle="输入教师访问码后，查看所有学生设备同步上来的预习数据。" />
+        <Panel title="教师身份验证" icon={<LockKeyhole size={18} />}>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              loadData();
+            }}
+          >
+            <label className="block text-sm text-slate-300">
+              教师访问码
+              <input
+                className="field mt-2"
+                type="password"
+                value={teacherCode}
+                onChange={(event) => setTeacherCode(event.target.value)}
+                placeholder="请输入部署时设置的访问码"
+                autoComplete="current-password"
+              />
+            </label>
+            {error && <p className="rounded-md border border-warm/30 bg-warm/10 p-3 text-sm text-warm">{error}</p>}
+            <button className="btn-primary w-full" type="submit" disabled={loading}>
+              {loading ? <LoaderCircle className="animate-spin" size={18} /> : <LockKeyhole size={18} />}
+              进入教师后台
+            </button>
+          </form>
+        </Panel>
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-6">
-      <SectionHeader title="教师展示模式" />
-      <div className="flex flex-wrap gap-3">
-        <button className="btn-primary" onClick={loadDemo}>一键生成演示用模拟数据</button>
-        <button className="btn-secondary" onClick={clearData}>清空本地演示数据</button>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <SectionHeader title="教师学情后台" subtitle="集中查看学生完成情况、知识点掌握度、题目正确率和个人薄弱项。" />
+        <div className="flex flex-wrap gap-2">
+          <span className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-sky-200 bg-white/80 px-3 text-sm text-slate-600">
+            <Database size={17} />{storageMode === "supabase" ? "云端数据库" : "服务器存储"}
+          </span>
+          <button className="btn-secondary" onClick={() => loadData()} disabled={loading}>
+            <RefreshCcw className={loading ? "animate-spin" : ""} size={17} />刷新
+          </button>
+          <button className="btn-secondary" onClick={exportCsv} disabled={!filteredRows.length}><Download size={17} />导出 CSV</button>
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              clearSavedTeacherCode();
+              setAuthenticated(false);
+              setTeacherCode("");
+            }}
+          >退出</button>
+        </div>
       </div>
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <Panel title="题库结构与标签" icon={<ClipboardList size={18} />}>
-          <div className="max-h-[620px] space-y-3 overflow-auto pr-2">
-            {questionBank.map((q) => (
-              <details key={q.id} className="rounded-md border border-white/10 bg-white/[0.04] p-3">
-                <summary className="cursor-pointer text-sm font-semibold">{q.id} · {typeLabel[q.type]} · {q.difficulty} · {q.question}</summary>
-                <div className="mt-3 space-y-2 text-sm text-slate-300">
-                  <p>标签：{q.module.join("、")}</p>
-                  <p>答案：{q.correctAnswer ?? q.referenceAnswer}</p>
-                  <p>解析：{q.explanation}</p>
-                  <p>追问：{q.followUpQuestions.join("；")}</p>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <Metric label="已收集学生" value={`${filteredRows.length} 人`} />
+        <Metric label="已完成" value={`${completedCount} 人`} />
+        <Metric label="平均正确率" value={`${averageAccuracy}%`} />
+        <Metric label="首次正确率" value={`${averageFirstAccuracy}%`} />
+        <Metric label="需重点关注" value={`${filteredRows.filter((row) => row.report.accuracy < 60 && row.attempted > 0).length} 人`} />
+      </div>
+
+      <Panel title="班级知识点掌握情况" icon={<BarChart3 size={18} />}>
+        {moduleStats.some((item) => item.attempted > 0) ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {moduleStats.map((item) => (
+              <div key={item.module} className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <h3 className="text-sm font-semibold">{item.module}</h3>
+                  <span className={item.accuracy >= 70 ? "text-sm font-semibold text-emerald-600" : "text-sm font-semibold text-warm"}>{item.accuracy}%</span>
                 </div>
-              </details>
-            ))}
-          </div>
-        </Panel>
-        <Panel title="本地学情概览" icon={<BarChart3 size={18} />}>
-          <div className="space-y-4">
-            {diagnostics.map((item) => (
-              <div key={item.module}>
-                <div className="mb-1 flex justify-between text-sm">
-                  <span>{item.module}</span>
-                  <span className="text-cyanbeam">{item.mastery}</span>
-                </div>
-                <ProgressBar value={item.score} />
+                <ProgressBar value={item.accuracy} />
+                <p className="mt-2 text-xs text-slate-400">答对 {item.correct}/{item.attempted} · {item.mastered}/{filteredRows.length} 人达到基本掌握</p>
               </div>
             ))}
           </div>
+        ) : <EmptyTeacherState text="还没有学生作答数据。学生提交第一题后，这里会自动出现班级知识点统计。" />}
+      </Panel>
+
+      <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+        <Panel title="学生完成情况" icon={<Users size={18} />}>
+          <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_220px]">
+            <label className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+              <input className="field pl-10" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索姓名、学号或班级" />
+            </label>
+            <select className="field" value={classFilter} onChange={(event) => setClassFilter(event.target.value)}>
+              <option>全部班级</option>
+              {classes.map((className) => <option key={className}>{className}</option>)}
+            </select>
+          </div>
+          {filteredRows.length ? (
+            <div className="teacher-table-wrap overflow-auto rounded-lg border border-sky-100">
+              <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+                <thead className="bg-sky-50 text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3">学生</th>
+                    <th className="px-4 py-3">班级</th>
+                    <th className="px-4 py-3">进度</th>
+                    <th className="px-4 py-3">正确率</th>
+                    <th className="px-4 py-3">错题数</th>
+                    <th className="px-4 py-3">最后同步</th>
+                    <th className="px-4 py-3">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map((row) => {
+                    const profile = row.submission.state;
+                    return (
+                      <tr key={row.submission.submissionKey} className="border-t border-sky-100 hover:bg-sky-50/70">
+                        <td className="px-4 py-3">
+                          <p className="font-semibold">{profile.studentName}</p>
+                          <p className="text-xs text-slate-400">{profile.studentId || "未填学号"}</p>
+                        </td>
+                        <td className="px-4 py-3">{profile.className || "—"}</td>
+                        <td className="px-4 py-3"><span className={row.completed ? "text-emerald-600" : "text-slate-600"}>{row.progress}%{row.completed ? " · 已完成" : ""}</span></td>
+                        <td className="px-4 py-3 font-semibold">{row.report.accuracy}%</td>
+                        <td className="px-4 py-3">{profile.wrongBook.length}</td>
+                        <td className="px-4 py-3 text-slate-400">{formatDashboardTime(row.submission.updatedAt)}</td>
+                        <td className="px-4 py-3">
+                          <button className="inline-flex items-center gap-1 font-semibold text-cyanbeam hover:underline" onClick={() => setSelectedKey(row.submission.submissionKey)}><Eye size={15} />详情</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : <EmptyTeacherState text={rows.length ? "没有符合当前筛选条件的学生。" : "暂未收到学生数据。学生填写姓名并提交答题后会自动同步。"} />}
+        </Panel>
+
+        <Panel title="学生个人诊断" icon={<UserRound size={18} />}>
+          {selectedRow ? (
+            <div className="space-y-5">
+              <div className="rounded-lg border border-cyanbeam/20 bg-sky-50 p-4">
+                <div>
+                  <h3 className="text-lg font-semibold">{selectedRow.submission.state.studentName}</h3>
+                  <p className="mt-1 text-sm text-slate-400">{selectedRow.submission.state.studentId || "未填学号"} · {selectedRow.submission.state.className || "未填班级"}</p>
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
+                  <div><p className="text-xl font-bold text-cyanbeam">{selectedRow.progress}%</p><p className="text-xs text-slate-400">进度</p></div>
+                  <div><p className="text-xl font-bold text-cyanbeam">{selectedRow.report.accuracy}%</p><p className="text-xs text-slate-400">正确率</p></div>
+                  <div><p className="text-xl font-bold text-cyanbeam">{selectedRow.submission.state.wrongBook.length}</p><p className="text-xs text-slate-400">错题</p></div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {selectedRow.report.diagnostics.filter((item) => item.attempted > 0).map((item) => (
+                  <div key={item.module}>
+                    <div className="mb-1 flex justify-between gap-2 text-sm"><span>{item.module}</span><span className={item.score >= 70 ? "text-emerald-600" : "text-warm"}>{item.score} · {item.mastery}</span></div>
+                    <ProgressBar value={item.score} />
+                  </div>
+                ))}
+              </div>
+              <div>
+                <h3 className="mb-3 text-sm font-semibold">需要关注的题目</h3>
+                <div className="max-h-64 space-y-2 overflow-auto pr-1">
+                  {questionBank.filter((question) => selectedRow.submission.state.records?.[question.id] && !selectedRow.submission.state.records[question.id].isCorrect).map((question) => (
+                    <div key={question.id} className="rounded-md border border-warm/30 bg-warm/10 p-3 text-sm">
+                      <p className="font-semibold">{question.id} · {question.module.join("、")}</p>
+                      <p className="mt-1 text-slate-600">{question.question}</p>
+                    </div>
+                  ))}
+                  {!selectedRow.submission.state.wrongBook.length && <p className="text-sm text-slate-400">当前没有记录到错题。</p>}
+                </div>
+              </div>
+            </div>
+          ) : <EmptyTeacherState text="从左侧选择一名学生查看个人诊断。" />}
         </Panel>
       </div>
+
+      <Panel title="题目正确率（按薄弱程度排序）" icon={<ClipboardList size={18} />}>
+        {questionStatsForClass.length ? (
+          <div className="teacher-table-wrap max-h-[520px] overflow-auto rounded-lg border border-sky-100">
+            <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+              <thead className="sticky top-0 bg-sky-50 text-slate-600">
+                <tr><th className="px-4 py-3">题号</th><th className="px-4 py-3">知识点</th><th className="px-4 py-3">题目</th><th className="px-4 py-3">作答人数</th><th className="px-4 py-3">答对人数</th><th className="px-4 py-3">正确率</th></tr>
+              </thead>
+              <tbody>
+                {questionStatsForClass.map((item) => (
+                  <tr key={item.question.id} className="border-t border-sky-100">
+                    <td className="px-4 py-3 font-semibold text-cyanbeam">{item.question.id}</td>
+                    <td className="px-4 py-3">{item.question.module.join("、")}</td>
+                    <td className="max-w-xl px-4 py-3">{item.question.question}</td>
+                    <td className="px-4 py-3">{item.attempted}</td>
+                    <td className="px-4 py-3">{item.correct}</td>
+                    <td className={`px-4 py-3 font-semibold ${item.accuracy >= 70 ? "text-emerald-600" : "text-warm"}`}>{item.accuracy}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <EmptyTeacherState text="暂无题目作答数据。" />}
+      </Panel>
     </section>
+  );
+}
+
+function EmptyTeacherState({ text }: { text: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-sky-200 bg-sky-50/60 p-8 text-center text-sm text-slate-400">
+      <Users className="mx-auto mb-3 text-sky-300" size={28} />
+      {text}
+    </div>
   );
 }
 
@@ -1780,6 +2156,22 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="mt-2 text-xl font-semibold text-white">{value}</p>
     </div>
   );
+}
+
+function SyncBadge({ status, lastSyncedAt, hasRecords }: { status: SyncStatus; lastSyncedAt: string; hasRecords: boolean }) {
+  if (!hasRecords) {
+    return <div className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-sky-200 bg-white/75 px-4 text-sm text-slate-400"><Cloud size={17} />提交答题后自动同步</div>;
+  }
+  if (status === "syncing") {
+    return <div className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-sky-200 bg-white/75 px-4 text-sm text-slate-500"><LoaderCircle className="animate-spin" size={17} />正在同步给老师…</div>;
+  }
+  if (status === "error") {
+    return <div className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-warm/30 bg-warm/10 px-4 text-sm text-warm"><CloudOff size={17} />同步失败，将在下次作答时重试</div>;
+  }
+  if (status === "synced") {
+    return <div className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm text-emerald-700"><Cloud size={17} />已同步老师端{lastSyncedAt ? ` · ${formatDashboardTime(lastSyncedAt)}` : ""}</div>;
+  }
+  return <div className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-sky-200 bg-white/75 px-4 text-sm text-slate-400"><Cloud size={17} />等待同步</div>;
 }
 
 function ProgressBar({ value }: { value: number }) {
