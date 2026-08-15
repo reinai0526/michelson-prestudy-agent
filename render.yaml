@@ -16,3 +16,7 @@ services:
         sync: false
       - key: TEACHER_ACCESS_CODE
         sync: false
+      - key: SUPABASE_URL
+        value: https://ubltjwolrqegvuhauhuj.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
