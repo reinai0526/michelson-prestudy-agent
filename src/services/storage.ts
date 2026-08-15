@@ -4,6 +4,8 @@ const STORAGE_KEY = "michelson-prestudy-state-v1";
 
 export const initialStudyState: StudyState = {
   studentName: "",
+  studentId: "",
+  className: "",
   currentIndex: 0,
   records: {},
   wrongBook: [],
@@ -31,6 +33,8 @@ export function clearStudyState() {
 export function makeDemoState(): StudyState {
   return {
     studentName: "演示学生 2026",
+    studentId: "20260001",
+    className: "物理实验示例班",
     currentIndex: 12,
     practiceMode: "all",
     completedAt: new Date().toISOString(),

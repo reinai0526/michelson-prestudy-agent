@@ -14,3 +14,5 @@ services:
         value: deepseek-v4-flash
       - key: DEEPSEEK_API_KEY
         sync: false
+      - key: TEACHER_ACCESS_CODE
+        sync: false

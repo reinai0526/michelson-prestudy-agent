@@ -1,8 +1,10 @@
 import http from "node:http";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getStorageMode, listSubmissions, upsertSubmission } from "./submission-store.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -18,6 +20,7 @@ const DIST_DIR = path.join(root, "dist");
 const API_KEY = process.env.DEEPSEEK_API_KEY;
 const BASE_URL = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "");
 const MODEL = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+const TEACHER_ACCESS_CODE = process.env.TEACHER_ACCESS_CODE || "";
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -55,7 +58,7 @@ function sendJson(response, status, payload) {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
-    "Access-Control-Allow-Headers": "Content-Type"
+    "Access-Control-Allow-Headers": "Content-Type, X-Teacher-Code"
   });
   response.end(JSON.stringify(payload));
 }
@@ -162,6 +165,43 @@ function readBody(request) {
   });
 }
 
+function cleanText(value, maxLength = 80) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function isTeacherAuthorized(request) {
+  if (!TEACHER_ACCESS_CODE) return false;
+  const provided = cleanText(request.headers["x-teacher-code"], 160);
+  const expected = Buffer.from(TEACHER_ACCESS_CODE);
+  const actual = Buffer.from(provided);
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
+function sanitizeSubmission(body) {
+  const submissionKey = cleanText(body.submissionKey, 160);
+  const sourceState = body.state && typeof body.state === "object" ? body.state : {};
+  const studentName = cleanText(sourceState.studentName, 80);
+  if (!submissionKey || !/^[A-Za-z0-9._:-]{8,160}$/.test(submissionKey)) {
+    throw new Error("提交标识无效，请刷新页面后重试。");
+  }
+  if (!studentName) throw new Error("请先填写姓名，再提交学习数据。");
+
+  const records = sourceState.records && typeof sourceState.records === "object" ? sourceState.records : {};
+  const safeRecords = Object.fromEntries(Object.entries(records).slice(0, 200));
+  const state = {
+    studentName,
+    studentId: cleanText(sourceState.studentId, 80),
+    className: cleanText(sourceState.className, 80),
+    currentIndex: Math.max(0, Number(sourceState.currentIndex) || 0),
+    records: safeRecords,
+    wrongBook: Array.isArray(sourceState.wrongBook) ? sourceState.wrongBook.slice(0, 200).map((item) => cleanText(item, 40)) : [],
+    completedAt: sourceState.completedAt ? cleanText(sourceState.completedAt, 60) : undefined,
+    practiceMode: sourceState.practiceMode === "wrong" ? "wrong" : "all"
+  };
+  const extensionState = body.extensionState && typeof body.extensionState === "object" ? body.extensionState : undefined;
+  return { submissionKey, state, extensionState, updatedAt: new Date().toISOString() };
+}
+
 function buildMessages(question, sources, kind, mode = "classroom", directionTitle = "", directionKeywords = []) {
   const evidence = sources
     .map((source, index) => {
@@ -250,18 +290,54 @@ async function callDeepSeek({ question, sources, kind, mode, directionTitle, dir
 }
 
 const server = http.createServer(async (request, response) => {
+  const requestUrl = new URL(request.url || "/", "http://localhost");
+  const pathname = requestUrl.pathname;
   if (request.method === "OPTIONS") {
     sendJson(response, 200, { ok: true });
     return;
   }
 
-  if (request.method === "GET" && request.url === "/health") {
+  if (request.method === "GET" && pathname === "/health") {
     sendJson(response, 200, {
       ok: true,
       model: MODEL,
       baseUrl: BASE_URL,
-      hasApiKey: Boolean(API_KEY)
+      hasApiKey: Boolean(API_KEY),
+      submissionStorage: getStorageMode()
     });
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/submissions") {
+    try {
+      const submission = sanitizeSubmission(JSON.parse(await readBody(request)));
+      const saved = await upsertSubmission(submission);
+      sendJson(response, 200, { ok: true, updatedAt: saved.updatedAt, storage: getStorageMode() });
+    } catch (error) {
+      sendJson(response, 400, { ok: false, message: error instanceof Error ? error.message : "学习数据保存失败" });
+    }
+    return;
+  }
+
+  if (pathname === "/api/teacher/submissions") {
+    if (!TEACHER_ACCESS_CODE) {
+      sendJson(response, 503, { ok: false, message: "教师后台尚未配置访问码，请由部署者设置 TEACHER_ACCESS_CODE。" });
+      return;
+    }
+    if (!isTeacherAuthorized(request)) {
+      sendJson(response, 401, { ok: false, message: "教师访问码不正确。" });
+      return;
+    }
+    try {
+      if (request.method === "GET") {
+        const submissions = await listSubmissions();
+        sendJson(response, 200, { ok: true, submissions, storage: getStorageMode() });
+        return;
+      }
+      sendJson(response, 405, { ok: false, message: "Method not allowed" });
+    } catch (error) {
+      sendJson(response, 500, { ok: false, message: error instanceof Error ? error.message : "教师端数据读取失败" });
+    }
     return;
   }
 
@@ -270,7 +346,7 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  if (request.method !== "POST" || request.url !== "/api/deepseek-chat") {
+  if (request.method !== "POST" || pathname !== "/api/deepseek-chat") {
     sendJson(response, 404, { ok: false, message: "Not found" });
     return;
   }
@@ -302,6 +378,8 @@ server.listen(PORT, HOST, () => {
   console.log(`Michelson agent listening on http://${displayHost}:${PORT}`);
   console.log(`Model: ${MODEL}`);
   console.log(`API key configured: ${API_KEY ? "yes" : "no"}`);
+  console.log(`Submission storage: ${getStorageMode()}`);
+  console.log(`Teacher access code: ${TEACHER_ACCESS_CODE ? "configured" : "not configured"}`);
   if (HOST === "0.0.0.0") {
     const urls = getLanUrls(PORT);
     console.log("Share mode URLs:");

@@ -48,12 +48,24 @@ export interface AnswerRecord {
 
 export interface StudyState {
   studentName: string;
+  studentId: string;
+  className: string;
   currentIndex: number;
   records: Record<string, AnswerRecord>;
   wrongBook: string[];
   completedAt?: string;
   practiceMode: "all" | "wrong";
 }
+
+export interface StudentSubmission {
+  submissionKey: string;
+  state: StudyState;
+  extensionState?: ExtensionLearningState;
+  firstSubmittedAt: string;
+  updatedAt: string;
+}
+
+export type SyncStatus = "idle" | "syncing" | "synced" | "error";
 
 export interface ModuleDiagnostic {
   module: string;
